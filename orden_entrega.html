@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Órdenes de Entrega</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 1.5rem;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            position: relative; /* Needed for z-index to work against watermark */
+            z-index: 1; /* Ensure content is above watermark */
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="number"],
+        input[type="date"],
+        input[type="time"],
+        select,
+        textarea {
+            @apply w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200;
+        }
+        label {
+            @apply block text-gray-700 text-sm font-semibold mb-2;
+        }
+        .section-title {
+            @apply text-2xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2;
+        }
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105;
+        }
+        .btn-secondary {
+            @apply bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105;
+        }
+        .table-header {
+            @apply bg-blue-500 text-white p-3 text-left font-semibold rounded-t-lg;
+        }
+        .table-row-even {
+            @apply bg-gray-50;
+        }
+        .table-row-odd {
+            @apply bg-white;
+        }
+        /* Styles for all modals and message box - hidden by default */
+        #shareModal, #confirmationModal, #followUpNoteModal, #messageBox {
+            display: none; /* Explicitly hidden by default, controlled by JS */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            justify-content: center; /* Used when display is flex */
+            align-items: center; /* Used when display is flex */
+            z-index: 1001;
+        }
+        .message-box { /* Specific styles for message box when shown */
+            display: none; /* Overridden by JS when shown */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+        .message-box button {
+            @apply bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg mt-4;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Content styles for modals */
+        #shareModalContent, #confirmationModalContent, #followUpNoteModalContent {
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 600px;
+            text-align: left;
+        }
+        #shareableText, #confirmationText, #followUpNoteText {
+            width: 100%;
+            height: 300px;
+            padding: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+        #copyShareableTextBtn, #copyConfirmationTextBtn, #copyFollowUpNoteBtn {
+            @apply bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg mt-4;
+        }
+        #closeShareModalBtn, #closeConfirmationModalBtn, #closeFollowUpNoteModalBtn {
+            @apply bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg mt-4 ml-2;
+        }
+
+        /* Watermark Overlay */
+        .watermark-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('https://placehold.co/800x600/ffffff/cccccc?text=MARCA+DE+AGUA'); /* Placeholder watermark image */
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 80%; /* Adjust size as needed */
+            opacity: 0.08; /* Very subtle */
+            z-index: -1; /* Ensure it's behind everything */
+            pointer-events: none; /* Allow clicks to pass through */
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <div class="watermark-overlay"></div>
+
+    <div class="container">
+        <h1 class="text-4xl font-extrabold text-center text-blue-700 mb-8">Orden de Entrega</h1>
+
+        <form id="deliveryOrderForm" class="space-y-8">
+
+            <div class="bg-blue-50 p-6 rounded-lg shadow-inner">
+                <h2 class="section-title">I. Detalles de la Orden</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div>
+                        <label for="orderNumber">Número de Orden de Entrega:</label>
+                        <input type="text" id="orderNumber" name="orderNumber" class="bg-gray-100 cursor-not-allowed" value="[Generado Automáticamente]" readonly>
+                    </div>
+                    <div>
+                        <label for="issueDate">Fecha de Emisión:</label>
+                        <input type="date" id="issueDate" name="issueDate" required>
+                    </div>
+                    <div>
+                        <label for="issueTime">Hora de Emisión:</label>
+                        <input type="time" id="issueTime" name="issueTime" required>
+                    </div>
+                    <div>
+                        <label for="scheduledDeliveryDate">Fecha de Entrega Programada:</label>
+                        <input type="date" id="scheduledDeliveryDate" name="scheduledDeliveryDate" required>
+                    </div>
+                    <div>
+                        <label for="scheduledDeliveryTime">Hora de Entrega Programada:</label>
+                        <input type="time" id="scheduledDeliveryTime" name="scheduledDeliveryTime" required>
+                    </div>
+                    <div>
+                        <label for="orderStatus">Estado de la Orden:</label>
+                        <select id="orderStatus" name="orderStatus" required>
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="En Ruta">En Ruta</option>
+                            <option value="Entregado">Entregado</option>
+                            <option value="Cancelado">Cancelado</option>
+                            <option value="Devuelto">Devuelto</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-green-50 p-6 rounded-lg shadow-inner">
+                <h2 class="section-title">II. Detalles del Remitente</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="senderName">Nombre / Razón Social:</label>
+                        <input type="text" id="senderName" name="senderName" placeholder="Nombre completo o razón social" required>
+                    </div>
+                    <div>
+                        <label for="senderId">C.I. / R.I.F. / ID Fiscal:</label>
+                        <input type="text" id="senderId" name="senderId" placeholder="Cédula de Identidad o RIF" required>
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="senderAddress">Dirección:</label>
+                        <input type="text" id="senderAddress" name="senderAddress" placeholder="Calle, Avenida, Número, Edificio/Casa, Apartamento" required>
+                    </div>
+                    <div>
+                        <label for="senderUrbanization">Urbanización / Sector:</label>
+                        <input type="text" id="senderUrbanization" name="senderUrbanization" placeholder="Nombre de la urbanización o sector">
+                    </div>
+                    <div>
+                        <label for="senderCity">Ciudad / Municipio:</label>
+                        <input type="text" id="senderCity" name="senderCity" placeholder="Ciudad y Municipio" required>
+                    </div>
+                    <div>
+                        <label for="senderState">Estado / Provincia:</label>
+                        <input type="text" id="senderState" name="senderState" placeholder="Estado o Provincia" required>
+                    </div>
+                    <div>
+                        <label for="senderZip">Código Postal:</label>
+                        <input type="text" id="senderZip" name="senderZip" placeholder="Código Postal">
+                    </div>
+                    <div>
+                        <label for="senderPhone">Teléfono de Contacto:</label>
+                        <input type="tel" id="senderPhone" name="senderPhone" placeholder="Ej: +58 412 1234567" required>
+                    </div>
+                    <div>
+                        <label for="senderEmail">Correo Electrónico:</label>
+                        <input type="email" id="senderEmail" name="senderEmail" placeholder="correo@ejemplo.com">
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-yellow-50 p-6 rounded-lg shadow-inner">
+                <h2 class="section-title">III. Detalles del Destinatario</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="recipientName">Nombre / Razón Social:</label>
+                        <input type="text" id="recipientName" name="recipientName" placeholder="Nombre completo o razón social" required>
+                    </div>
+                    <div>
+                        <label for="recipientId">C.I. / R.I.F. / ID Fiscal:</label>
+                        <input type="text" id="recipientId" name="recipientId" placeholder="Cédula de Identidad o RIF" required>
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="recipientAddress">Dirección de Entrega:</label>
+                        <input type="text" id="recipientAddress" name="recipientAddress" placeholder="Calle, Avenida, Número, Edificio/Casa, Apartamento" required>
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="recipientReference">Punto de Referencia (Opcional):</label>
+                        <input type="text" id="recipientReference" name="recipientReference" placeholder="Ej: Frente a la Farmacia X">
+                    </div>
+                    <div>
+                        <label for="recipientUrbanization">Urbanización / Sector:</label>
+                        <input type="text" id="recipientUrbanization" name="recipientUrbanization" placeholder="Nombre de la urbanización o sector">
+                    </div>
+                    <div>
+                        <label for="recipientCity">Ciudad / Municipio:</label>
+                        <input type="text" id="recipientCity" name="recipientCity" placeholder="Ciudad y Municipio" required>
+                    </div>
+                    <div>
+                        <label for="recipientState">Estado / Provincia:</label>
+                        <input type="text" id="recipientState" name="recipientState" placeholder="Estado o Provincia" required>
+                    </div>
+                    <div>
+                        <label for="recipientZip">Código Postal:</label>
+                        <input type="text" id="recipientZip" name="recipientZip" placeholder="Código Postal">
+                    </div>
+                    <div>
+                        <label for="recipientPhone">Teléfono de Contacto:</label>
+                        <input type="tel" id="recipientPhone" name="recipientPhone" placeholder="Ej: +58 412 7654321" required>
+                    </div>
+                    <div>
+                        <label for="recipientEmail">Correo Electrónico:</label>
+                        <input type="email" id="recipientEmail" name="recipientEmail" placeholder="correo@ejemplo.com">
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="deliveryInstructions">Instrucciones Especiales de Entrega:</label>
+                        <textarea id="deliveryInstructions" name="deliveryInstructions" rows="3" placeholder="Ej: Llamar 30 min antes, Dejar en conserjería"></textarea>
+                        <button type="button" id="generateInstructionsBtn" class="btn-secondary mt-2 w-full flex items-center justify-center">
+                            Generar Instrucciones ✨ <span id="instructionsLoading" class="loading-spinner hidden"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-red-50 p-6 rounded-lg shadow-inner">
+                <h2 class="section-title">IV. Detalles de la Encomienda</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label for="trackingNumber">Número de Guía / Tracking:</label>
+                        <input type="text" id="trackingNumber" name="trackingNumber" placeholder="Número de seguimiento único" required>
+                    </div>
+                    <div>
+                        <label for="serviceType">Tipo de Servicio:</label>
+                        <select id="serviceType" name="serviceType" required>
+                            <option value="Estándar">Estándar</option>
+                            <option value="Urgente">Urgente</option>
+                            <option value="Expreso">Expreso</option>
+                            <option value="Contra Reembolso">Contra Reembolso</option>
+                            <option value="Carga Pesada">Carga Pesada</option>
+                        </select>
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="declaredContent">Contenido Declarado:</label>
+                        <input type="text" id="declaredContent" name="declaredContent" placeholder="Breve descripción del contenido (Ej: Documentos, Ropa)">
+                    </div>
+                    <div>
+                        <label for="declaredValue">Valor Declarado (para seguro):</label>
+                        <input type="number" id="declaredValue" name="declaredValue" step="0.01" placeholder="Monto en moneda local o USD">
+                    </div>
+                    <div>
+                        <label for="requiresInsurance">¿Requiere Seguro?</label>
+                        <select id="requiresInsurance" name="requiresInsurance" required>
+                            <option value="Sí">Sí</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mb-4">Artículos de la Encomienda</h3>
+                <div id="parcelItems" class="space-y-4">
+                    <div class="parcel-item border border-gray-200 p-4 rounded-lg bg-white">
+                        <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+                            <div>
+                                <label for="itemQuantity_1">Cantidad:</label>
+                                <input type="number" id="itemQuantity_1" name="itemQuantity[]" value="1" min="1" required>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="itemType_1">Tipo de Bulto:</label>
+                                <input type="text" id="itemType_1" name="itemType[]" placeholder="Caja, Sobre, Paquete" required>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="itemDescription_1">Descripción del Artículo:</label>
+                                <input type="text" id="itemDescription_1" name="itemDescription[]" placeholder="Ej: Libros, Documentos Legales" required>
+                            </div>
+                            <div>
+                                <label for="itemWeight_1">Peso (kg):</label>
+                                <input type="number" id="itemWeight_1" name="itemWeight[]" step="0.01" placeholder="Ej: 5.2" required>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="itemDimensions_1">Dimensiones (L x An x Al) (cm):</label>
+                                <input type="text" id="itemDimensions_1" name="itemDimensions[]" placeholder="Ej: 40 x 30 x 20" required>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="itemObservations_1">Observaciones Específicas:</label>
+                                <input type="text" id="itemObservations_1" name="itemObservations[]" placeholder="Ej: Frágil, manejar con cuidado">
+                            </div>
+                        </div>
+                        <button type="button" class="remove-item-btn mt-4 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg shadow-md transition duration-300">Eliminar Artículo</button>
+                    </div>
+                </div>
+                <button type="button" id="addItemBtn" class="btn-secondary mt-6">Agregar Otro Artículo</button>
+            </div>
+
+            <div class="bg-purple-50 p-6 rounded-lg shadow-inner">
+                <h2 class="section-title">V. Resumen de Costos</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="baseCost">Costo Base del Envío:</label>
+                        <input type="number" id="baseCost" name="baseCost" step="0.01" placeholder="Monto en moneda local" required>
+                    </div>
+                    <div>
+                        <label for="weightVolumeCharges">Cargos por Peso/Volumen:</label>
+                        <input type="number" id="weightVolumeCharges" name="weightVolumeCharges" step="0.01" value="0.00">
+                    </div>
+                    <div>
+                        <label for="additionalServiceCharges">Cargos por Servicio Adicional:</label>
+                        <input type="number" id="additionalServiceCharges" name="additionalServiceCharges" step="0.01" value="0.00">
+                    </div>
+                    <div>
+                        <label for="insuranceCost">Costo del Seguro (si aplica):</label>
+                        <input type="number" id="insuranceCost" name="insuranceCost" step="0.01" value="0.00">
+                    </div>
+                    <div>
+                        <label for="otherCharges">Otros Cargos:</label>
+                        <input type="number" id="otherCharges" name="otherCharges" step="0.01" value="0.00">
+                    </div>
+                    <div>
+                        <label for="subtotal">Subtotal:</label>
+                        <input type="text" id="subtotal" name="subtotal" class="bg-gray-100 cursor-not-allowed" readonly>
+                    </div>
+                    <div>
+                        <label for="tax">IVA / Impuestos (si aplica):</label>
+                        <input type="number" id="tax" name="tax" step="0.01" value="0.00">
+                    </div>
+                    <div>
+                        <label for="totalPayable">Total a Pagar:</label>
+                        <input type="text" id="totalPayable" name="totalPayable" class="bg-gray-100 cursor-not-allowed font-bold text-lg" readonly>
+                    </div>
+                    <div>
+                        <label for="paymentMethod">Forma de Pago:</label>
+                        <select id="paymentMethod" name="paymentMethod" required>
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                            <option value="Punto de Venta">Punto de Venta</option>
+                            <option value="Pago Móvil">Pago Móvil</option>
+                            <option value="Pago en Destino">Pago en Destino</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="amountPaid">Monto Pagado:</label>
+                        <input type="number" id="amountPaid" name="amountPaid" step="0.01" value="0.00">
+                    </div>
+                    <div>
+                        <label for="balanceDue">Saldo Pendiente:</label>
+                        <input type="text" id="balanceDue" name="balanceDue" class="bg-gray-100 cursor-not-allowed" readonly>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-100 p-6 rounded-lg shadow-inner">
+                <h2 class="section-title">VI. Confirmación de Entrega</h2>
+                <p class="text-gray-600 mb-4">Esta sección será completada al momento de la entrega.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="receiverName">Nombre Completo de quien Recibe:</label>
+                        <input type="text" id="receiverName" name="receiverName" placeholder="Nombre de la persona que recibe">
+                    </div>
+                    <div>
+                        <label for="receiverId">C.I. / ID de quien Recibe:</label>
+                        <input type="text" id="receiverId" name="receiverId" placeholder="Cédula de Identidad o ID">
+                    </div>
+                    <div>
+                        <label for="actualDeliveryDate">Fecha de Entrega Real:</label>
+                        <input type="date" id="actualDeliveryDate" name="actualDeliveryDate">
+                    </div>
+                    <div>
+                        <label for="actualDeliveryTime">Hora de Entrega Real:</label>
+                        <input type="time" id="actualDeliveryTime" name="actualDeliveryTime">
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="deliveryCondition">Condición de la Encomienda al Momento de la Entrega:</label>
+                        <textarea id="deliveryCondition" name="deliveryCondition" rows="2" placeholder="Ej: En buen estado, Con embalaje ligeramente dañado"></textarea>
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="driverObservations">Observaciones del Transportista:</label>
+                        <textarea id="driverObservations" name="driverObservations" rows="3" placeholder="Cualquier observación relevante"></textarea>
+                    </div>
+                    <div>
+                        <label for="receiverSignature">Firma de quien Recibe:</label>
+                        <input type="text" id="receiverSignature" name="receiverSignature" placeholder="Firma (o dejar espacio para firma física)">
+                    </div>
+                    <div>
+                        <label for="driverSignature">Firma del Transportista:</label>
+                        <input type="text" id="driverSignature" name="driverSignature" placeholder="Firma (o dejar espacio para firma física)">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-center space-x-4">
+                <button type="submit" class="btn-primary">Generar Orden</button>
+                <button type="reset" class="btn-secondary">Limpiar Formulario</button>
+            </div>
+        </form>
+
+        <div id="generatedOrderOutput" class="mt-12 p-8 bg-blue-50 border border-blue-200 rounded-lg shadow-lg hidden">
+            <h2 class="section-title text-center">Orden de Entrega Generada</h2>
+            <div id="outputContent" class="prose max-w-none">
+                </div>
+            <div class="flex justify-center mt-8 flex-wrap gap-4">
+                <button id="printOrderBtn" class="btn-primary">Imprimir Orden</button>
+                <button id="shareOrderBtn" class="btn-primary">Compartir Orden 🔗</button>
+                <button id="generateConfirmationBtn" class="btn-primary">Generar Mensaje de Confirmación ✨ <span id="confirmationLoading" class="loading-spinner hidden"></span></button>
+                <button id="generateFollowUpNoteBtn" class="btn-primary">Generar Nota de Seguimiento ✨ <span id="followUpNoteLoading" class="loading-spinner hidden"></span></button>
+                <button id="closeOutputBtn" class="btn-secondary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="messageBox" class="message-box">
+        <p id="messageText"></p>
+        <button onclick="document.getElementById('messageBox').style.display = 'none';">OK</button>
+    </div>
+
+    <div id="shareModal"> <div id="shareModalContent">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Compartir Orden de Entrega</h3>
+            <textarea id="shareableText" readonly></textarea>
+            <div class="flex justify-end">
+                <button id="copyShareableTextBtn">Copiar al Portapapeles</button>
+                <button id="closeShareModalBtn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmationModal"> <div id="confirmationModalContent">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Mensaje de Confirmación para el Cliente</h3>
+            <textarea id="confirmationText" readonly></textarea>
+            <div class="flex justify-end">
+                <button id="copyConfirmationTextBtn">Copiar al Portapapeles</button>
+                <button id="closeConfirmationModalBtn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="followUpNoteModal"> <div id="followUpNoteModalContent">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Nota de Seguimiento para Atención al Cliente</h3>
+            <textarea id="followUpNoteText" readonly></textarea>
+            <div class="flex justify-end">
+                <button id="copyFollowUpNoteBtn">Copiar al Portapapeles</button>
+                <button id="closeFollowUpNoteModalBtn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Ensure all modals are hidden on load as a safeguard
+            document.getElementById('shareModal').style.display = 'none';
+            document.getElementById('confirmationModal').style.display = 'none';
+            document.getElementById('followUpNoteModal').style.display = 'none';
+            document.getElementById('messageBox').style.display = 'none';
+
+            // Set current date and time for emission
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+
+            document.getElementById('issueDate').value = `${year}-${month}-${day}`;
+            document.getElementById('issueTime').value = `${hours}:${minutes}`;
+
+            // Auto-generate order number (simple example)
+            document.getElementById('orderNumber').value = `ORD-${Date.now()}`;
+
+            const deliveryOrderForm = document.getElementById('deliveryOrderForm');
+            const generatedOrderOutput = document.getElementById('generatedOrderOutput');
+            const outputContent = document.getElementById('outputContent');
+            const addItemBtn = document.getElementById('addItemBtn');
+            const parcelItems = document.getElementById('parcelItems');
+            const printOrderBtn = document.getElementById('printOrderBtn');
+            const shareOrderBtn = document.getElementById('shareOrderBtn');
+            const closeOutputBtn = document.getElementById('closeOutputBtn');
+            const generateInstructionsBtn = document.getElementById('generateInstructionsBtn');
+            const instructionsLoading = document.getElementById('instructionsLoading');
+            const deliveryInstructionsTextarea = document.getElementById('deliveryInstructions');
+
+            const shareModal = document.getElementById('shareModal');
+            const shareableTextarea = document.getElementById('shareableText');
+            const copyShareableTextBtn = document.getElementById('copyShareableTextBtn');
+            const closeShareModalBtn = document.getElementById('closeShareModalBtn');
+
+            const generateConfirmationBtn = document.getElementById('generateConfirmationBtn');
+            const confirmationLoading = document.getElementById('confirmationLoading');
+            const confirmationModal = document.getElementById('confirmationModal');
+            const confirmationTextarea = document.getElementById('confirmationText');
+            const copyConfirmationTextBtn = document.getElementById('copyConfirmationTextBtn');
+            const closeConfirmationModalBtn = document.getElementById('closeConfirmationModalBtn');
+
+            const generateFollowUpNoteBtn = document.getElementById('generateFollowUpNoteBtn');
+            const followUpNoteLoading = document.getElementById('followUpNoteLoading');
+            const followUpNoteModal = document.getElementById('followUpNoteModal');
+            const followUpNoteTextarea = document.getElementById('followUpNoteText');
+            const copyFollowUpNoteBtn = document.getElementById('copyFollowUpNoteBtn');
+            const closeFollowUpNoteModalBtn = document.getElementById('closeFollowUpNoteModalBtn');
+
+
+            let itemCounter = 1;
+
+            function showMessageBox(message) {
+                const messageBox = document.getElementById('messageBox');
+                const messageText = document.getElementById('messageText');
+                messageBox.style.display = 'block'; // Show the message box
+            }
+
+            function calculateTotals() {
+                const baseCost = parseFloat(document.getElementById('baseCost').value) || 0;
+                const weightVolumeCharges = parseFloat(document.getElementById('weightVolumeCharges').value) || 0;
+                const additionalServiceCharges = parseFloat(document.getElementById('additionalServiceCharges').value) || 0;
+                const insuranceCost = parseFloat(document.getElementById('insuranceCost').value) || 0;
+                const otherCharges = parseFloat(document.getElementById('otherCharges').value) || 0;
+                const tax = parseFloat(document.getElementById('tax').value) || 0;
+
+                const subtotal = baseCost + weightVolumeCharges + additionalServiceCharges + insuranceCost + otherCharges;
+                document.getElementById('subtotal').value = subtotal.toFixed(2);
+
+                const totalPayable = subtotal + tax;
+                document.getElementById('totalPayable').value = totalPayable.toFixed(2);
+
+                const amountPaid = parseFloat(document.getElementById('amountPaid').value) || 0;
+                const balanceDue = totalPayable - amountPayable;
+                document.getElementById('balanceDue').value = balanceDue.toFixed(2);
+            }
+
+            ['baseCost', 'weightVolumeCharges', 'additionalServiceCharges', 'insuranceCost', 'otherCharges', 'tax', 'amountPaid'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('input', calculateTotals);
+                }
+            });
+
+            calculateTotals();
+
+            addItemBtn.addEventListener('click', () => {
+                itemCounter++;
+                const newItemHtml = `
+                    <div class="parcel-item border border-gray-200 p-4 rounded-lg bg-white">
+                        <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+                            <div>
+                                <label for="itemQuantity_${itemCounter}">Cantidad:</label>
+                                <input type="number" id="itemQuantity_${itemCounter}" name="itemQuantity[]" value="1" min="1" required>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="itemType_${itemCounter}">Tipo de Bulto:</label>
+                                <input type="text" id="itemType_${itemCounter}" name="itemType[]" placeholder="Caja, Sobre, Paquete" required>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="itemDescription_${itemCounter}">Descripción del Artículo:</label>
+                                <input type="text" id="itemDescription_${itemCounter}" name="itemDescription[]" placeholder="Ej: Libros, Documentos Legales" required>
+                            </div>
+                            <div>
+                                <label for="itemWeight_${itemCounter}">Peso (kg):</label>
+                                <input type="number" id="itemWeight_${itemCounter}" name="itemWeight[]" step="0.01" placeholder="Ej: 5.2" required>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="itemDimensions_${itemCounter}">Dimensiones (L x An x Al) (cm):</label>
+                                <input type="text" id="itemDimensions_${itemCounter}" name="itemDimensions[]" placeholder="Ej: 40 x 30 x 20" required>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="itemObservations_${itemCounter}">Observaciones Específicas:</label>
+                                <input type="text" id="itemObservations_${itemCounter}" name="itemObservations[]" placeholder="Ej: Frágil, manejar con cuidado">
+                            </div>
+                        </div>
+                        <button type="button" class="remove-item-btn mt-4 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg shadow-md transition duration-300">Eliminar Artículo</button>
+                    </div>
+                `;
+                parcelItems.insertAdjacentHTML('beforeend', newItemHtml);
+            });
+
+            parcelItems.addEventListener('click', (event) => {
+                if (event.target.classList.contains('remove-item-btn')) {
+                    if (parcelItems.children.length > 1) {
+                        event.target.closest('.parcel-item').remove();
+                    } else {
+                        showMessageBox("Debe haber al menos un artículo en la encomienda.");
+                    }
+                }
+            });
+
+            generateInstructionsBtn.addEventListener('click', async () => {
+                const recipientAddress = document.getElementById('recipientAddress').value;
+                const recipientUrbanization = document.getElementById('recipientUrbanization').value;
+                const recipientCity = document.getElementById('recipientCity').value;
+                const recipientState = document.getElementById('recipientState').value;
+                const recipientReference = document.getElementById('recipientReference').value;
+                const declaredContent = document.getElementById('declaredContent').value;
+                const currentInstructions = deliveryInstructionsTextarea.value;
+
+                if (!recipientAddress || !recipientCity || !recipientState) {
+                    showMessageBox("Por favor, complete al menos la dirección, ciudad y estado del destinatario para generar instrucciones.");
+                    return;
+                }
+
+                let prompt = `Genera instrucciones de entrega concisas y claras para un transportista. `;
+                prompt += `La dirección es: ${recipientAddress}`;
+                if (recipientUrbanization) prompt += `, Urbanización/Sector: ${recipientUrbanization}`;
+                prompt += `, Ciudad: ${recipientCity}, Estado: ${recipientState}.`;
+                if (recipientReference) prompt += ` Punto de referencia: ${recipientReference}.`;
+                if (declaredContent) prompt += ` Contenido de la encomienda: ${declaredContent}.`;
+                if (currentInstructions) prompt += ` Instrucciones previas del cliente: ${currentInstructions}.`;
+                prompt += ` Enfócate en la claridad y la brevedad para el conductor.`;
+
+                instructionsLoading.style.display = 'inline-block'; // Show loading spinner
+                generateInstructionsBtn.disabled = true;
+
+                try {
+                    let chatHistory = [];
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    const payload = { contents: chatHistory };
+                    const apiKey = "";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const generatedText = result.candidates[0].content.parts[0].text;
+                        deliveryInstructionsTextarea.value = generatedText;
+                    } else {
+                        showMessageBox("No se pudieron generar las instrucciones. Inténtelo de nuevo.");
+                        console.error("Gemini API response structure unexpected:", result);
+                    }
+                } catch (error) {
+                    showMessageBox("Error al conectar con la API de Gemini. Por favor, inténtelo de nuevo.");
+                    console.error("Error calling Gemini API:", error);
+                } finally {
+                    instructionsLoading.style.display = 'none'; // Hide loading spinner
+                    generateInstructionsBtn.disabled = false;
+                }
+            });
+
+            generateConfirmationBtn.addEventListener('click', async () => {
+                const orderNumber = document.getElementById('orderNumber').value;
+                const recipientName = document.getElementById('recipientName').value;
+                const scheduledDeliveryDate = document.getElementById('scheduledDeliveryDate').value;
+                const scheduledDeliveryTime = document.getElementById('scheduledDeliveryTime').value;
+                const trackingNumber = document.getElementById('trackingNumber').value;
+                const declaredContent = document.getElementById('declaredContent').value;
+                const totalPayable = document.getElementById('totalPayable').value;
+
+                if (!recipientName || !scheduledDeliveryDate || !trackingNumber) {
+                    showMessageBox("Por favor, complete el nombre del destinatario, la fecha de entrega programada y el número de guía para generar el mensaje de confirmación.");
+                    return;
+                }
+
+                let prompt = `Genera un mensaje de confirmación de envío amigable y conciso para un cliente. `;
+                prompt += `La orden es la #${orderNumber}. `;
+                prompt += `El destinatario es ${recipientName}. `;
+                prompt += `La entrega está programada para el ${scheduledDeliveryDate} a las ${scheduledDeliveryTime}. `;
+                prompt += `El número de seguimiento es ${trackingNumber}. `;
+                if (declaredContent) prompt += `Contenido: ${declaredContent}. `;
+                prompt += `El total a pagar es $${totalPayable}. `;
+                prompt += `Incluye un saludo y un agradecimiento por su preferencia.`;
+
+                confirmationLoading.style.display = 'inline-block'; // Show loading spinner
+                generateConfirmationBtn.disabled = true;
+
+                try {
+                    let chatHistory = [];
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    const payload = { contents: chatHistory };
+                    const apiKey = "";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const generatedText = result.candidates[0].content.parts[0].text;
+                        confirmationTextarea.value = generatedText;
+                        confirmationModal.style.display = 'flex'; // Show the modal
+                    } else {
+                        showMessageBox("No se pudo generar el mensaje de confirmación. Inténtelo de nuevo.");
+                        console.error("Gemini API response structure unexpected:", result);
+                    }
+                } catch (error) {
+                    showMessageBox("Error al conectar con la API de Gemini. Por favor, inténtelo de nuevo.");
+                    console.error("Error calling Gemini API:", error);
+                } finally {
+                    confirmationLoading.style.display = 'none'; // Hide loading spinner
+                    generateConfirmationBtn.disabled = false;
+                }
+            });
+
+            generateFollowUpNoteBtn.addEventListener('click', async () => {
+                const orderNumber = document.getElementById('orderNumber').value;
+                const orderStatus = document.getElementById('orderStatus').value;
+                const recipientName = document.getElementById('recipientName').value;
+                const deliveryCondition = document.getElementById('deliveryCondition').value;
+                const driverObservations = document.getElementById('driverObservations').value;
+
+                if (!orderNumber || !orderStatus || !recipientName) {
+                    showMessageBox("Por favor, complete el número de orden, el estado y el nombre del destinatario para generar la nota de seguimiento.");
+                    return;
+                }
+
+                let prompt = `Genera una nota de seguimiento concisa para el equipo de atención al cliente sobre la orden de entrega. `;
+                prompt += `Orden #: ${orderNumber}. `;
+                prompt += `Estado actual: ${orderStatus}. `;
+                prompt += `Destinatario: ${recipientName}. `;
+                if (deliveryCondition) prompt += `Condición de la encomienda al momento de la entrega: ${deliveryCondition}. `;
+                if (driverObservations) prompt += `Observaciones del transportista: ${driverObservations}. `;
+                prompt += `La nota debe ser breve y resaltar cualquier punto clave para el seguimiento.`;
+
+                followUpNoteLoading.style.display = 'inline-block'; // Show loading spinner
+                generateFollowUpNoteBtn.disabled = true;
+
+                try {
+                    let chatHistory = [];
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    const payload = { contents: chatHistory };
+                    const apiKey = "";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const generatedText = result.candidates[0].content.parts[0].text;
+                        followUpNoteTextarea.value = generatedText;
+                        followUpNoteModal.style.display = 'flex'; // Show the new modal
+                    } else {
+                        showMessageBox("No se pudo generar la nota de seguimiento. Inténtelo de nuevo.");
+                        console.error("Gemini API response structure unexpected:", result);
+                    }
+                } catch (error) {
+                    showMessageBox("Error al conectar con la API de Gemini. Por favor, inténtelo de nuevo.");
+                    console.error("Error calling Gemini API:", error);
+                } finally {
+                    followUpNoteLoading.style.display = 'none'; // Hide loading spinner
+                    generateFollowUpNoteBtn.disabled = false;
+                }
+            });
+
+
+            deliveryOrderForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+
+                const formData = new FormData(deliveryOrderForm);
+                const data = {};
+                for (let [key, value] of formData.entries()) {
+                    if (key.endsWith('[]')) {
+                        const baseKey = key.slice(0, -2);
+                        if (!data[baseKey]) {
+                            data[baseKey] = [];
+                        }
+                        data[baseKey].push(value);
+                    } else {
+                        data[key] = value;
+                    }
+                }
+
+                data.parcelItems = [];
+                const itemQuantities = data['itemQuantity'] || [];
+                const itemTypes = data['itemType'] || [];
+                const itemDescriptions = data['itemDescription'] || [];
+                const itemWeights = data['itemWeight'] || [];
+                const itemDimensions = data['itemDimensions'] || [];
+                const itemObservations = data['itemObservations'] || [];
+
+                for (let i = 0; i < itemQuantities.length; i++) {
+                    data.parcelItems.push({
+                        quantity: itemQuantities[i],
+                        type: itemTypes[i],
+                        description: itemDescriptions[i],
+                        weight: itemWeights[i],
+                        dimensions: itemDimensions[i],
+                        observations: itemObservations[i]
+                    });
+                }
+                delete data['itemQuantity'];
+                delete data['itemType'];
+                delete data['itemDescription'];
+                delete data['itemWeight'];
+                delete data['itemDimensions'];
+                delete data['itemObservations'];
+
+
+                let outputHtml = `
+                    <div class="text-center mb-8">
+                        <img src="https://placehold.co/150x50/ADD8E6/000000?text=LOGO+EMPRESA" alt="Logo de la Empresa" class="mx-auto mb-4" onerror="this.onerror=null;this.src='https://placehold.co/150x50/cccccc/000000?text=Logo+no+disponible';">
+                        <h1 class="text-3xl font-bold text-blue-800">Orden de Entrega</h1>
+                        <p class="text-gray-600">${new Date().toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p class="text-gray-700 text-sm mt-2">
+                            [Nombre de tu Empresa de Transporte y Envíos]<br>
+                            [Dirección de tu Empresa]<br>
+                            Teléfono: [Número de Teléfono de tu Empresa]<br>
+                            Correo Electrónico: [Correo Electrónico de tu Empresa]<br>
+                        </p>
+                    </div>
+
+                    <div class="mb-6 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                        <h3 class="text-xl font-semibold text-blue-700 mb-3">I. Detalles de la Orden</h3>
+                        <p><strong>Número de Orden:</strong> ${data.orderNumber}</p>
+                        <p><strong>Fecha de Emisión:</strong> ${data.issueDate} ${data.issueTime}</p>
+                        <p><strong>Fecha de Entrega Programada:</strong> ${data.scheduledDeliveryDate} ${data.scheduledDeliveryTime}</p>
+                        <p><strong>Estado:</strong> ${data.orderStatus}</p>
+                    </div>
+
+                    <div class="mb-6 p-4 border border-green-200 rounded-lg bg-green-50">
+                        <h3 class="text-xl font-semibold text-green-700 mb-3">II. Detalles del Remitente</h3>
+                        <p><strong>Nombre/Razón Social:</strong> ${data.senderName}</p>
+                        <p><strong>C.I./R.I.F.:</strong> ${data.senderId}</p>
+                        <p><strong>Dirección:</strong> ${data.senderAddress}, ${data.senderUrbanization ? data.senderUrbanization + ', ' : ''}${data.senderCity}, ${data.senderState}, CP: ${data.senderZip}</p>
+                        <p><strong>Teléfono:</strong> ${data.senderPhone}</p>
+                        <p><strong>Correo:</strong> ${data.senderEmail}</p>
+                    </div>
+
+                    <div class="mb-6 p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                        <h3 class="text-xl font-semibold text-yellow-700 mb-3">III. Detalles del Destinatario</h3>
+                        <p><strong>Nombre/Razón Social:</strong> ${data.recipientName}</p>
+                        <p><strong>C.I./R.I.F.:</strong> ${data.recipientId}</p>
+                        <p><strong>Dirección de Entrega:</strong> ${data.recipientAddress}, ${data.recipientUrbanization ? data.recipientUrbanization + ', ' : ''}${data.recipientCity}, ${data.recipientState}, CP: ${data.recipientZip}</p>
+                        <p><strong>Punto de Referencia:</strong> ${data.recipientReference || 'N/A'}</p>
+                        <p><strong>Teléfono:</strong> ${data.recipientPhone}</p>
+                        <p><strong>Correo:</strong> ${data.recipientEmail}</p>
+                        <p><strong>Instrucciones Especiales:</strong> ${data.deliveryInstructions || 'Ninguna'}</p>
+                    </div>
+
+                    <div class="mb-6 p-4 border border-red-200 rounded-lg bg-red-50">
+                        <h3 class="text-xl font-semibold text-red-700 mb-3">IV. Detalles de la Encomienda</h3>
+                        <p><strong>Número de Guía / Tracking:</strong> ${data.trackingNumber}</p>
+                        <p><strong>Tipo de Servicio:</strong> ${data.serviceType}</p>
+                        <p><strong>Contenido Declarado:</strong> ${data.declaredContent}</p>
+                        <p><strong>Valor Declarado:</strong> ${data.declaredValue ? `$${parseFloat(data.declaredValue).toFixed(2)}` : 'N/A'}</p>
+                        <p><strong>Requiere Seguro:</strong> ${data.requiresInsurance}</p>
+
+                        <h4 class="text-lg font-medium text-gray-700 mt-4 mb-2">Artículos:</h4>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white rounded-lg shadow-sm">
+                                <thead>
+                                    <tr>
+                                        <th class="table-header">Cant.</th>
+                                        <th class="table-header">Tipo Bulto</th>
+                                        <th class="table-header">Descripción</th>
+                                        <th class="table-header">Peso (kg)</th>
+                                        <th class="table-header">Dimensiones (cm)</th>
+                                        <th class="table-header">Observaciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.parcelItems.map((item, index) => `
+                                        <tr class="${index % 2 === 0 ? 'table-row-even' : 'table-row-odd'}">
+                                            <td class="p-3 border-b border-gray-200">${item.quantity}</td>
+                                            <td class="p-3 border-b border-gray-200">${item.type}</td>
+                                            <td class="p-3 border-b border-gray-200">${item.description}</td>
+                                            <td class="p-3 border-b border-gray-200">${item.weight}</td>
+                                            <td class="p-3 border-b border-gray-200">${item.dimensions}</td>
+                                            <td class="p-3 border-b border-gray-200">${item.observations || 'N/A'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="mb-6 p-4 border border-purple-200 rounded-lg bg-purple-50">
+                        <h3 class="text-xl font-semibold text-purple-700 mb-3">V. Resumen de Costos</h3>
+                        <p><strong>Costo Base del Envío:</strong> $${parseFloat(data.baseCost).toFixed(2)}</p>
+                        <p><strong>Cargos por Peso/Volumen:</strong> $${parseFloat(data.weightVolumeCharges).toFixed(2)}</p>
+                        <p><strong>Cargos por Servicio Adicional:</strong> $${parseFloat(data.additionalServiceCharges).toFixed(2)}</p>
+                        <p><strong>Costo del Seguro:</strong> $${parseFloat(data.insuranceCost).toFixed(2)}</p>
+                        <p><strong>Otros Cargos:</strong> $${parseFloat(data.otherCharges).toFixed(2)}</p>
+                        <p><strong>Subtotal:</strong> $${parseFloat(data.subtotal).toFixed(2)}</p>
+                        <p><strong>IVA / Impuestos:</strong> $${parseFloat(data.tax).toFixed(2)}</p>
+                        <p class="text-xl font-bold text-blue-800"><strong>Total a Pagar:</strong> $${parseFloat(data.totalPayable).toFixed(2)}</p>
+                        <p><strong>Forma de Pago:</strong> ${data.paymentMethod}</p>
+                        <p><strong>Monto Pagado:</strong> $${parseFloat(data.amountPaid).toFixed(2)}</p>
+                        <p><strong>Saldo Pendiente:</strong> $${parseFloat(data.balanceDue).toFixed(2)}</p>
+                    </div>
+
+                    <div class="mb-6 p-4 border border-gray-300 rounded-lg bg-gray-100">
+                        <h3 class="text-xl font-semibold text-gray-700 mb-3">VI. Confirmación de Entrega</h3>
+                        <p><strong>Nombre de quien Recibe:</strong> ${data.receiverName || '________________________________________'}</p>
+                        <p><strong>C.I. / ID de quien Recibe:</strong> ${data.receiverId || '________________________________________'}</p>
+                        <p><strong>Fecha de Entrega Real:</strong> ${data.actualDeliveryDate || '________________________________________'}</p>
+                        <p><strong>Hora de Entrega Real:</strong> ${data.actualDeliveryTime || '________________________________________'}</p>
+                        <p><strong>Condición de la Encomienda:</strong> ${data.deliveryCondition || '________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________'}</p>
+                        <p><strong>Observaciones del Transportista:</strong> ${data.driverObservations || '________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________'}</p>
+                        <p><strong>Firma de quien Recibe:</strong> ${data.receiverSignature || '________________________________________'}</p>
+                        <p><strong>Firma del Transportista:</strong> ${data.driverSignature || '________________________________________'}</p>
+                    </div>
+
+                    <div class="text-center mt-8 text-gray-700">
+                        <p>¡Gracias por confiar en nuestros servicios!</p>
+                    </div>
+                `;
+
+                outputContent.innerHTML = outputHtml;
+                generatedOrderOutput.classList.remove('hidden');
+                window.scrollTo(0, document.body.scrollHeight);
+            });
+
+            printOrderBtn.addEventListener('click', () => {
+                const printContent = document.getElementById('outputContent').innerHTML;
+
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                    showMessageBox("El navegador bloqueó la ventana de impresión. Por favor, deshabilite el bloqueador de pop-ups para este sitio.");
+                    return;
+                }
+
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Orden de Entrega</title>
+                        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                        <style>
+                            body { font-family: 'Inter', sans-serif; margin: 20px; color: #333;
+                                background-image: url('https://placehold.co/800x600/ffffff/cccccc?text=MARCA+DE+AGUA'); /* Watermark for print */
+                                background-repeat: no-repeat;
+                                background-position: center center;
+                                background-size: 80%;
+                                opacity: 0.1;
+                                -webkit-print-color-adjust: exact; /* Crucial for background images to print */
+                                print-color-adjust: exact;
+                            }
+                            h1, h2, h3, h4 { color: #1e3a8a; margin-top: 1.5rem; margin-bottom: 0.8rem; }
+                            p { margin-bottom: 5px; line-height: 1.4; }
+                            strong { font-weight: 600; }
+                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                            th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+                            th { background-color: #3b82f6; color: white; font-weight: bold; }
+                            .section-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem; border-bottom: 2px solid #60a5fa; padding-bottom: 0.5rem; }
+                            .mb-6 { margin-bottom: 1.5rem; }
+                            .p-4 { padding: 1rem; }
+                            .border { border-width: 1px; border-style: solid; }
+                            .rounded-lg { border-radius: 0.5rem; }
+                            .bg-blue-50 { background-color: #eff6ff; border-color: #bfdbfe; }
+                            .bg-green-50 { background-color: #ecfdf5; border-color: #a7f3d0; }
+                            .bg-yellow-50 { background-color: #fffbeb; border-color: #fde68a; }
+                            .bg-red-50 { background-color: #fef2f2; border-color: #fecaca; }
+                            .bg-purple-50 { background-color: #f5f3ff; border-color: #d8b4fe; }
+                            .bg-gray-100 { background-color: #f3f4f6; border-color: #d1d5db; }
+                            .text-center { text-align: center; }
+                            .text-gray-600 { color: #4b5563; }
+                            .text-blue-800 { color: #1e40af; }
+                            .text-blue-700 { color: #1d4ed8; }
+                            .text-green-700 { color: #047857; }
+                            .text-yellow-700 { color: #b45309; }
+                            .text-red-700 { color: #b91c1c; }
+                            .text-purple-700 { color: #6d28d9; }
+                            .text-gray-700 { color: #374151; }
+                            .font-bold { font-weight: 700; }
+                            .font-semibold { font-weight: 600; }
+                            .text-xl { font-size: 1.25rem; }
+                            .text-lg { font-size: 1.125rem; }
+                            .text-3xl { font-size: 1.875rem; }
+                            /* Print specific styles */
+                            @media print {
+                                body { margin: 0; padding: 0; }
+                                .container { box-shadow: none; border-radius: 0; margin: 0; max-width: none; }
+                                table { page-break-inside: auto; }
+                                tr { page-break-inside: avoid; page-break-after: auto; }
+                                thead { display: table-header-group; }
+                                tfoot { display: table-footer-group; }
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        ${printContent}
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+
+                printWindow.onload = () => {
+                    printWindow.focus();
+                    printWindow.print();
+                    printWindow.close();
+                };
+            });
+
+            shareOrderBtn.addEventListener('click', () => {
+                const currentOrderData = {};
+                const formData = new FormData(deliveryOrderForm);
+                for (let [key, value] of formData.entries()) {
+                    if (key.endsWith('[]')) {
+                        const baseKey = key.slice(0, -2);
+                        if (!currentOrderData[baseKey]) {
+                            currentOrderData[baseKey] = [];
+                        }
+                        currentOrderData[baseKey].push(value);
+                    } else {
+                        currentOrderData[key] = value;
+                    }
+                }
+
+                let parcelItemsText = '';
+                const itemQuantities = currentOrderData['itemQuantity'] || [];
+                const itemTypes = currentOrderData['itemType'] || [];
+                const itemDescriptions = currentOrderData['itemDescription'] || [];
+                const itemWeights = currentOrderData['itemWeight'] || [];
+                const itemDimensions = currentOrderData['itemDimensions'] || [];
+                const itemObservations = currentOrderData['itemObservations'] || [];
+
+                for (let i = 0; i < itemQuantities.length; i++) {
+                    parcelItemsText += `  - Cant: ${itemQuantities[i]}, Tipo: ${itemTypes[i]}, Desc: ${itemDescriptions[i]}, Peso: ${itemWeights[i]}kg, Dim: ${itemDimensions[i]}cm, Obs: ${itemObservations[i] || 'N/A'}\n`;
+                }
+
+
+                const shareableContent = `
+ORDEN DE ENTREGA #${currentOrderData.orderNumber}
+Fecha de Emisión: ${currentOrderData.issueDate} ${currentOrderData.issueTime}
+Entrega Programada: ${currentOrderData.scheduledDeliveryDate} ${currentOrderData.scheduledDeliveryTime}
+Estado: ${currentOrderData.orderStatus}
+
+--- REMITENTE ---
+Nombre/Razón Social: ${currentOrderData.senderName}
+ID Fiscal: ${currentOrderData.senderId}
+Dirección: ${currentOrderData.senderAddress}, ${currentOrderData.senderUrbanization || ''}, ${currentOrderData.senderCity}, ${currentOrderData.senderState}, CP: ${currentOrderData.senderZip || ''}
+Teléfono: ${currentOrderData.senderPhone}
+Correo: ${currentOrderData.senderEmail || 'N/A'}
+
+--- DESTINATARIO ---
+Nombre/Razón Social: ${currentOrderData.recipientName}
+ID Fiscal: ${currentOrderData.recipientId}
+Dirección de Entrega: ${currentOrderData.recipientAddress}, ${currentOrderData.recipientUrbanization || ''}, ${currentOrderData.recipientCity}, ${currentOrderData.recipientState}, CP: ${currentOrderData.recipientZip || ''}
+Punto de Referencia: ${currentOrderData.recipientReference || 'N/A'}
+Teléfono: ${currentOrderData.recipientPhone}
+Correo: ${currentOrderData.recipientEmail || 'N/A'}
+Instrucciones Especiales: ${currentOrderData.deliveryInstructions || 'Ninguna'}
+
+--- ENCOMIENDA ---
+Número de Guía: ${currentOrderData.trackingNumber}
+Tipo de Servicio: ${currentOrderData.serviceType}
+Contenido Declarado: ${currentOrderData.declaredContent || 'N/A'}
+Valor Declarado: ${currentOrderData.declaredValue ? `$${parseFloat(currentOrderData.declaredValue).toFixed(2)}` : 'N/A'}
+Requiere Seguro: ${currentOrderData.requiresInsurance}
+
+Artículos:
+${parcelItemsText}
+
+--- RESUMEN DE COSTOS ---
+Costo Base: $${parseFloat(currentOrderData.baseCost).toFixed(2)}
+Cargos Peso/Volumen: $${parseFloat(currentOrderData.weightVolumeCharges || 0).toFixed(2)}
+Cargos Adicionales: $${parseFloat(currentOrderData.additionalServiceCharges || 0).toFixed(2)}
+Costo Seguro: $${parseFloat(currentOrderData.insuranceCost || 0).toFixed(2)}
+Otros Cargos: $${parseFloat(currentOrderData.otherCharges || 0).toFixed(2)}
+Subtotal: $${parseFloat(currentOrderData.subtotal).toFixed(2)}
+IVA/Impuestos: $${parseFloat(currentOrderData.tax || 0).toFixed(2)}
+TOTAL A PAGAR: $${parseFloat(currentOrderData.totalPayable).toFixed(2)}
+Forma de Pago: ${currentOrderData.paymentMethod}
+Monto Pagado: $${parseFloat(currentOrderData.amountPaid || 0).toFixed(2)}
+Saldo Pendiente: $${parseFloat(currentOrderData.balanceDue).toFixed(2)}
+
+--- CONFIRMACIÓN DE ENTREGA (al momento de la entrega) ---
+Nombre Recibe: ${currentOrderData.receiverName || '____________________'}
+ID Recibe: ${currentOrderData.receiverId || '____________________'}
+Fecha Real: ${currentOrderData.actualDeliveryDate || '__________'}
+Hora Real: ${currentOrderData.actualDeliveryTime || '_______'}
+Condición: ${currentOrderData.deliveryCondition || '________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________'}
+Obs. Transportista: ${currentOrderData.driverObservations || '________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________'}
+Firma Recibe: ____________________
+Firma Transportista: ____________________
+
+¡Gracias por preferir nuestros servicios!
+                `.trim();
+
+                shareableTextarea.value = shareableContent;
+                shareModal.style.display = 'flex'; // Show the modal
+            });
+
+            copyShareableTextBtn.addEventListener('click', () => {
+                shareableTextarea.select();
+                try {
+                    document.execCommand('copy');
+                    showMessageBox("¡Orden copiada al portapapeles!");
+                } catch (err) {
+                    showMessageBox("No se pudo copiar automáticamente. Por favor, seleccione el texto y use Ctrl+C (o Cmd+C) para copiar.");
+                }
+            });
+
+            closeShareModalBtn.addEventListener('click', () => {
+                shareModal.style.display = 'none'; // Hide the modal
+            });
+
+            copyConfirmationTextBtn.addEventListener('click', () => {
+                confirmationTextarea.select();
+                try {
+                    document.execCommand('copy');
+                    showMessageBox("¡Mensaje de confirmación copiado al portapapeles!");
+                } catch (err) {
+                    showMessageBox("No se pudo copiar automáticamente. Por favor, seleccione el texto y use Ctrl+C (o Cmd+C) para copiar.");
+                }
+            });
+
+            closeConfirmationModalBtn.addEventListener('click', () => {
+                confirmationModal.style.display = 'none'; // Hide the modal
+            });
+
+            copyFollowUpNoteBtn.addEventListener('click', () => {
+                followUpNoteTextarea.select();
+                try {
+                    document.execCommand('copy');
+                    showMessageBox("¡Nota de seguimiento copiada al portapapeles!");
+                } catch (err) {
+                    showMessageBox("No se pudo copiar automáticamente. Por favor, seleccione el texto y use Ctrl+C (o Cmd+C) para copiar.");
+                }
+            });
+
+            closeFollowUpNoteModalBtn.addEventListener('click', () => {
+                followUpNoteModal.style.display = 'none'; // Hide the modal
+            });
+
+
+            closeOutputBtn.addEventListener('click', () => {
+                generatedOrderOutput.classList.add('hidden');
+                deliveryOrderForm.reset();
+                document.getElementById('orderNumber').value = `ORD-${Date.now()}`;
+                calculateTotals();
+                parcelItems.innerHTML = `
+                    <div class="parcel-item border border-gray-200 p-4 rounded-lg bg-white">
+                        <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+                            <div>
+                                <label for="itemQuantity_1">Cantidad:</label>
+                                <input type="number" id="itemQuantity_1" name="itemQuantity[]" value="1" min="1" required>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="itemType_1">Tipo de Bulto:</label>
+                                <input type="text" id="itemType_1" name="itemType[]" placeholder="Caja, Sobre, Paquete" required>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="itemDescription_1">Descripción del Artículo:</label>
+                                <input type="text" id="itemDescription_1" name="itemDescription[]" placeholder="Ej: Libros, Documentos Legales" required>
+                            </div>
+                            <div>
+                                <label for="itemWeight_1">Peso (kg):</label>
+                                <input type="number" id="itemWeight_1" name="itemWeight[]" step="0.01" placeholder="Ej: 5.2" required>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="itemDimensions_1">Dimensiones (L x An x Al) (cm):</label>
+                                <input type="text" id="itemDimensions_1" name="itemDimensions[]" placeholder="Ej: 40 x 30 x 20" required>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="itemObservations_1">Observaciones Específicas:</label>
+                                <input type="text" id="itemObservations_1" name="itemObservations[]" placeholder="Ej: Frágil, manejar con cuidado">
+                            </div>
+                        </div>
+                        <button type="button" class="remove-item-btn mt-4 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg shadow-md transition duration-300">Eliminar Artículo</button>
+                    </div>
+                `;
+                itemCounter = 1;
+            });
+        });
+    </script>
+</body>
+</html>
+
