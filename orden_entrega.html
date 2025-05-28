@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+YPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -574,7 +574,7 @@
                 document.getElementById('totalPayable').value = totalPayable.toFixed(2);
 
                 const amountPaid = parseFloat(document.getElementById('amountPaid').value) || 0;
-                const balanceDue = totalPayable - amountPayable;
+                const balanceDue = totalPayable - amountPaid; // Corrected from amountPayable
                 document.getElementById('balanceDue').value = balanceDue.toFixed(2);
             }
 
@@ -1224,4 +1224,3 @@ Firma Transportista: ____________________
     </script>
 </body>
 </html>
-
